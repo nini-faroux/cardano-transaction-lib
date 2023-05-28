@@ -8,7 +8,6 @@ module Ctl.Internal.Plutip.Server
   , testPlutipContracts
   ) where
 
-import Ctl.Internal.Plutip.Services
 import Prelude
 
 import Aeson (decodeAeson, encodeAeson, parseJsonStringToAeson, stringifyAeson)
@@ -36,6 +35,12 @@ import Ctl.Internal.Contract.QueryBackend (mkCtlBackendParams)
 import Ctl.Internal.Helpers ((<</>>))
 import Ctl.Internal.Logging (Logger, mkLogger, setupLogs)
 import Ctl.Internal.Plutip.PortCheck (isPortAvailable)
+import Ctl.Internal.Plutip.Services
+  ( bracket
+  , runServices
+  , stopChildProcessWithPort
+  , stopChildProcessWithPortAndRemoveOnSignal
+  )
 import Ctl.Internal.Plutip.Spawn
   ( ManagedProcess
   , NewOutputAction(Success, NoOp)
@@ -108,6 +113,7 @@ import Effect.Aff.Retry
   , recovering
   )
 import Effect.Class (liftEffect)
+import Effect.Class.Console (log)
 import Effect.Exception (error, throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -268,7 +274,9 @@ startPlutipContractEnv plutipCfg distr cleanupRef = do
   startKupo' response
   case plutipCfg.extraServices of
     [] -> pure unit
-    services -> runServices services cleanupRef
+    services -> do
+      log "running extra services"
+      runServices services cleanupRef
   { env, printLogs, clearLogs } <- mkContractEnv' cleanupRef
   wallets <- mkWallets' env ourKey response
   pure
@@ -312,14 +320,6 @@ startPlutipContractEnv plutipCfg distr cleanupRef = do
           liftEffect $ cleanupTmpDir process workingDir
           void $ configurePostgresServer postgresConfig
       )
-      cleanupRef
-
-  startClaritySyncServer' :: Aff Unit
-  startClaritySyncServer' =
-    bracket
-      startClaritySyncServer
-      (stopChildProcessWithPort claritySyncServerPort)
-      (const $ pure unit)
       cleanupRef
 
   startOgmios' :: ClusterStartupParameters -> Aff Unit
@@ -412,7 +412,6 @@ configCheck cfg = do
     services :: Array (UInt /\ String)
     services =
       [ UInt.fromInt 5432 /\ "postgres"
-      , claritySyncServerPort /\ "clarity-sync-server"
       , cfg.port /\ "plutip-server"
       , cfg.ogmiosConfig.port /\ "ogmios"
       , cfg.kupoConfig.port /\ "kupo"
@@ -519,39 +518,6 @@ stopPlutipCluster cfg = do
         $ (decodeAeson <=< parseJsonStringToAeson)
             body
   either (liftEffect <<< throw <<< show) pure res
-
-startClaritySyncServer :: Aff ManagedProcess
-startClaritySyncServer = do
-  spawn "clarity-sync-server"
-    [ "--port"
-    , claritySyncServerPortString
-    , "--pg-conn"
-    , postgresConnectionString
-    ]
-    defaultSpawnOptions
-    Nothing
-
-startClaritySyncWorkerExec :: Aff ChildProcess
-startClaritySyncWorkerExec = liftEffect $ exec claritySyncWorkerCmdString
-  defaultExecOptions
-  (const $ pure unit)
-
-claritySyncWorkerCmdString :: String
-claritySyncWorkerCmdString =
-  "clarity-sync-worker --ogmios-port 1338 \
-  \--pg-conn \"host=localhost port=5432 user=clarity password=clarity dbname=clarity\" \
-  \--ogmios-host \"127.0.0.1\" \
-  \--from-tip"
-
-postgresConnectionString :: String
-postgresConnectionString =
-  "host=localhost port=5432 user=clarity password=clarity dbname=clarity"
-
-claritySyncServerPort :: UInt
-claritySyncServerPort = UInt.fromInt 9001
-
-claritySyncServerPortString :: String
-claritySyncServerPortString = "9001"
 
 startOgmios :: PlutipConfig -> ClusterStartupParameters -> Aff ManagedProcess
 startOgmios cfg params = do

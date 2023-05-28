@@ -19,7 +19,6 @@ import Contract.Address (NetworkId(MainnetId))
 import Contract.Chain (waitNSlots)
 import Contract.Config (defaultSynchronizationParams, defaultTimeParams)
 import Contract.Monad (Contract, ContractEnv, liftContractM, runContractInEnv)
-import Contract.Prelude (undefined)
 import Control.Monad.Error.Class (liftEither)
 import Control.Monad.State (State, execState, modify_)
 import Control.Monad.Trans.Class (lift)
@@ -47,9 +46,7 @@ import Ctl.Internal.Plutip.Spawn
   , OnSignalRef
   , cleanupOnSigint
   , cleanupTmpDir
-  , removeOnSignal
   , spawn
-  , stop
   , waitForStop
   )
 import Ctl.Internal.Plutip.Types
@@ -58,7 +55,6 @@ import Ctl.Internal.Plutip.Types
   , PlutipConfig
   , PostgresConfig
   , PrivateKeyResponse(PrivateKeyResponse)
-  , Service(Service)
   , StartClusterResponse(ClusterStartupSuccess, ClusterStartupFailure)
   , StopClusterRequest(StopClusterRequest)
   , StopClusterResponse
@@ -120,13 +116,7 @@ import Effect.Ref as Ref
 import Mote (bracket) as Mote
 import Mote.Description (Description(Group, Test))
 import Mote.Monad (MoteT(MoteT), mapTest)
-import Node.ChildProcess
-  ( ChildProcess
-  , SpawnOptions
-  , defaultExecOptions
-  , defaultSpawnOptions
-  , exec
-  )
+import Node.ChildProcess (defaultSpawnOptions)
 import Node.FS.Sync (exists, mkdir) as FSSync
 import Node.Path (FilePath, dirname)
 import Type.Prelude (Proxy(Proxy))

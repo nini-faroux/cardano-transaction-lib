@@ -14,11 +14,12 @@ import Ctl.Internal.Plutip.Spawn
 import Ctl.Internal.Plutip.Types
   ( ClusterStartupParameters
   , ClusterStartupRequest(ClusterStartupRequest)
+  , FlagArgument(EmptyArgument, MultipleArgument, SingleArgument)
   , PlutipConfig
   , PostgresConfig
   , PrivateKeyResponse(PrivateKeyResponse)
   , ProcessType(Spawn, Exec)
-  , Service(..)
+  , Service(Service)
   , StartClusterResponse(ClusterStartupSuccess, ClusterStartupFailure)
   , StopClusterRequest(StopClusterRequest)
   , StopClusterResponse
@@ -37,6 +38,7 @@ import Effect.Aff.Retry
   , recovering
   )
 import Effect.Class (liftEffect)
+import Effect.Class.Console (log)
 import Effect.Exception (error, throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -60,7 +62,7 @@ runServices services cleanupRef = traverse_ op services
 runSpawnService
   :: UInt
   -> String
-  -> Array (String /\ String)
+  -> Array (String /\ FlagArgument)
   -> Ref (Array (Aff Unit))
   -> Aff Unit
 runSpawnService port command arguments cleanupRef =
@@ -70,27 +72,35 @@ runSpawnService port command arguments cleanupRef =
     (const $ pure unit)
     cleanupRef
 
-runSpawnService' :: String -> Array (String /\ String) -> Aff ManagedProcess
+runSpawnService'
+  :: String -> Array (String /\ FlagArgument) -> Aff ManagedProcess
 runSpawnService' command arguments =
   spawn command (inputArgumentsToSpawnArguments arguments) defaultSpawnOptions
     Nothing
 
-inputArgumentsToSpawnArguments :: Array (String /\ String) -> Array String
+inputArgumentsToSpawnArguments :: Array (String /\ FlagArgument) -> Array String
 inputArgumentsToSpawnArguments = Array.concatMap op
   where
-  op (flag /\ arg) = [ "--" <> flag, arg ]
+  op (flag /\ EmptyArgument) = [ "--" <> flag ]
+  op (flag /\ (SingleArgument arg)) = [ "--" <> flag, arg ]
+  op (flag /\ (MultipleArgument args)) = [ "--" <> flag, args ]
 
-runExecService :: String -> Array (String /\ String) -> Aff ChildProcess
+runExecService :: String -> Array (String /\ FlagArgument) -> Aff ChildProcess
 runExecService command arguments = liftEffect $ exec
   (inputArgumentsToExecArguments command arguments)
   defaultExecOptions
   (const $ pure unit)
 
-inputArgumentsToExecArguments :: String -> Array (String /\ String) -> String
-inputArgumentsToExecArguments command arguments = command <> op arguments
+inputArgumentsToExecArguments
+  :: String -> Array (String /\ FlagArgument) -> String
+inputArgumentsToExecArguments command arguments = command <> " " <> op arguments
   where
   op args = Array.foldr
-    (\(flag /\ arg) acc -> "--" <> flag <> " " <> arg <> " " <> acc)
+    ( \(flag /\ arg') acc -> case arg' of
+        EmptyArgument -> "--" <> flag <> " " <> acc
+        SingleArgument arg -> "--" <> flag <> " " <> arg <> " " <> acc
+        MultipleArgument args -> "--" <> flag <> " \"" <> args <> "\" " <> acc
+    )
     ""
     args
 

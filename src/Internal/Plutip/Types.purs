@@ -2,6 +2,7 @@ module Ctl.Internal.Plutip.Types
   ( ClusterStartupParameters
   , ErrorMessage
   , FilePath
+  , FlagArgument(EmptyArgument, SingleArgument, MultipleArgument)
   , PlutipConfig
   , PostgresConfig
   , ProcessType(Spawn, Exec)
@@ -49,7 +50,6 @@ import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
 import Data.Show (class Show)
 import Data.Show.Generic (genericShow)
-import Data.Show.Generic (genericShow)
 import Data.Time.Duration (Seconds(Seconds))
 import Data.Tuple.Nested (type (/\))
 import Data.UInt (UInt)
@@ -59,7 +59,7 @@ import Partial.Unsafe (unsafePartial)
 newtype Service = Service
   { processType :: ProcessType
   , command :: String
-  , arguments :: Array (String /\ String)
+  , arguments :: Array (String /\ FlagArgument)
   , port :: Maybe UInt
   }
 
@@ -77,6 +77,18 @@ derive instance Eq ProcessType
 derive instance Generic ProcessType _
 
 instance Show ProcessType where
+  show = genericShow
+
+data FlagArgument
+  = SingleArgument String
+  | MultipleArgument String
+  | EmptyArgument
+
+derive instance Eq FlagArgument
+
+derive instance Generic FlagArgument _
+
+instance Show FlagArgument where
   show = genericShow
 
 -- | A config that is used to run tests on Plutip clusters.

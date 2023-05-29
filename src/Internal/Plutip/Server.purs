@@ -257,15 +257,15 @@ startPlutipContractEnv plutipCfg distr cleanupRef = do
   configCheck plutipCfg
   startPlutipServer'
   ourKey /\ response <- startPlutipCluster'
-  case plutipCfg.postgresConfig of
-    Just postgresConfig -> startPostgres' response postgresConfig
-    Nothing -> pure unit
+  -- Start the postgres service if the user provided a PostgresConfig
+  maybe (pure unit) (startPostgres' response) plutipCfg.postgresConfig
   startOgmios' response
   startKupo' response
+  -- Start the extra services provided by the user if any
   case plutipCfg.extraServices of
     [] -> pure unit
     services -> do
-      log "running extra services"
+      log "Running extra services"
       runServices services cleanupRef
   { env, printLogs, clearLogs } <- mkContractEnv' cleanupRef
   wallets <- mkWallets' env ourKey response
@@ -356,7 +356,7 @@ startPlutipContractEnv plutipCfg distr cleanupRef = do
          , printLogs :: Aff Unit
          , clearLogs :: Aff Unit
          }
-  mkContractEnv' cleanupRef | plutipCfg.suppressLogs = do
+  mkContractEnv' cleanupRef' | plutipCfg.suppressLogs = do
     -- if logs should be suppressed, setup the machinery and continue with
     -- the bracket
     { addLogEntry, suppressedLogger, printLogs, clearLogs } <-
@@ -377,9 +377,9 @@ startPlutipContractEnv plutipCfg distr cleanupRef = do
           , clearLogs: liftEffect clearLogs
           }
       )
-      cleanupRef
+      cleanupRef'
 
-  mkContractEnv' cleanupRef =
+  mkContractEnv' cleanupRef' =
     -- otherwise, proceed with the env setup and provide a normal logger
     bracket
       ( mkClusterContractEnv plutipCfg
@@ -393,7 +393,7 @@ startPlutipContractEnv plutipCfg distr cleanupRef = do
           , clearLogs: pure unit
           }
       )
-      cleanupRef
+      cleanupRef'
 
 -- | Throw an exception if `PlutipConfig` contains ports that are occupied.
 configCheck :: PlutipConfig -> Aff Unit
